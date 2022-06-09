@@ -11,12 +11,12 @@ import (
 	"encoding/base64"
 	"encoding/binary"
 	"errors"
+	"golang.org/x/crypto/hkdf"
 	"io"
 	"net/http"
 	"strconv"
 	"strings"
-
-	"golang.org/x/crypto/hkdf"
+	"time"
 )
 
 const MaxRecordSize uint32 = 4096
@@ -39,16 +39,25 @@ type HTTPClient interface {
 	Do(*http.Request) (*http.Response, error)
 }
 
+// GetAuthHeaderFunc is a function that generates an Authorization header
+type GetAuthHeaderFunc func(
+	endpoint,
+	subscriber,
+	vapidPublicKey,
+	vapidPrivateKey string,
+) (string, error)
+
 // Options are config and extra params needed to send a notification
 type Options struct {
-	HTTPClient      HTTPClient // Will replace with *http.Client by default if not included
-	RecordSize      uint32     // Limit the record size
-	Subscriber      string     // Sub in VAPID JWT token
-	Topic           string     // Set the Topic header to collapse a pending messages (Optional)
-	TTL             int        // Set the TTL on the endpoint POST request
-	Urgency         Urgency    // Set the Urgency header to change a message priority (Optional)
-	VAPIDPublicKey  string     // VAPID public key, passed in VAPID Authorization header
-	VAPIDPrivateKey string     // VAPID private key, used to sign VAPID JWT token
+	HTTPClient      HTTPClient        // Will replace with *http.Client by default if not included
+	RecordSize      uint32            // Limit the record size
+	Subscriber      string            // Sub in VAPID JWT token
+	Topic           string            // Set the Topic header to collapse a pending messages (Optional)
+	TTL             int               // Set the TTL on the endpoint POST request
+	Urgency         Urgency           // Set the Urgency header to change a message priority (Optional)
+	VAPIDPublicKey  string            // VAPID public key, passed in VAPID Authorization header
+	VAPIDPrivateKey string            // VAPID private key, used to sign VAPID JWT token
+	GetAuthHeader   GetAuthHeaderFunc // ability to override auth header generation, for example to cache headers
 }
 
 // Keys are the base64 encoded values from PushSubscription.getKey()
@@ -206,8 +215,13 @@ func SendNotificationWithContext(ctx context.Context, message []byte, s *Subscri
 		req.Header.Set("Urgency", string(options.Urgency))
 	}
 
+	getAuthHeader := defaultGetVAPIDAuthorizationHeader
+	if options.GetAuthHeader != nil {
+		getAuthHeader = options.GetAuthHeader
+	}
+
 	// Get VAPID Authorization header
-	vapidAuthHeader, err := getVAPIDAuthorizationHeader(
+	vapidAuthHeader, err := getAuthHeader(
 		s.Endpoint,
 		options.Subscriber,
 		options.VAPIDPublicKey,
@@ -228,6 +242,21 @@ func SendNotificationWithContext(ctx context.Context, message []byte, s *Subscri
 	}
 
 	return client.Do(req)
+}
+
+func defaultGetVAPIDAuthorizationHeader(
+	endpoint,
+	subscriber,
+	vapidPublicKey,
+	vapidPrivateKey string,
+) (string, error) {
+	return GenerateVAPIDAuthorizationHeader(
+		endpoint,
+		subscriber,
+		vapidPublicKey,
+		vapidPrivateKey,
+		time.Now().Add(time.Hour*12),
+	)
 }
 
 // decodeSubscriptionKey decodes a base64 subscription key.

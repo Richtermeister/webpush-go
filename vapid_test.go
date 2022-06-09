@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/golang-jwt/jwt"
 )
@@ -20,11 +21,12 @@ func TestVAPID(t *testing.T) {
 	}
 
 	// Get authentication header
-	vapidAuthHeader, err := getVAPIDAuthorizationHeader(
+	vapidAuthHeader, err := GenerateVAPIDAuthorizationHeader(
 		s.Endpoint,
 		sub,
 		vapidPublicKey,
 		vapidPrivateKey,
+		time.Now(),
 	)
 	if err != nil {
 		t.Fatal(err)

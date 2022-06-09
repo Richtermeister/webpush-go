@@ -58,12 +58,13 @@ func generateVAPIDHeaderKeys(privateKey []byte) *ecdsa.PrivateKey {
 	}
 }
 
-// getVAPIDAuthorizationHeader
-func getVAPIDAuthorizationHeader(
+// GenerateVAPIDAuthorizationHeader generates a VAPID authorization header
+func GenerateVAPIDAuthorizationHeader(
 	endpoint,
 	subscriber,
 	vapidPublicKey,
 	vapidPrivateKey string,
+	expiration time.Time,
 ) (string, error) {
 	// Create the JWT token
 	subURL, err := url.Parse(endpoint)
@@ -73,7 +74,7 @@ func getVAPIDAuthorizationHeader(
 
 	token := jwt.NewWithClaims(jwt.SigningMethodES256, jwt.MapClaims{
 		"aud": fmt.Sprintf("%s://%s", subURL.Scheme, subURL.Host),
-		"exp": time.Now().Add(time.Hour * 12).Unix(),
+		"exp": expiration.Unix(),
 		"sub": fmt.Sprintf("mailto:%s", subscriber),
 	})
 
